@@ -1,13 +1,7 @@
-import re
 from typing import List, Tuple, Union
 
-import nltk
 import pandas as pd
-from bs4 import BeautifulSoup
 from numpy import ndarray
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 
 
@@ -49,18 +43,7 @@ def preprocess(doc: str) -> str:
     Returns:
         String comprising the corresponding preprocessed tweet.
     """
-
-    # Remove HTML
-    bs = BeautifulSoup(doc, "html.parser")
-    doc = " " + bs.get_text() + " "
-
-    # Keep only letters
-    doc = re.sub(r"[^a-zA-Z\s]", " ", doc)
-
-    # Convert to lowercase
-    doc = doc.lower()
-
-    return doc
+    pass
 
 
 def preprocess_multiple(docs: List[str]) -> List[str]:
@@ -74,7 +57,7 @@ def preprocess_multiple(docs: List[str]) -> List[str]:
         List of strings, each comprising the corresponding preprocessed
             text.
     """
-    return [preprocess(doc) for doc in docs]
+    pass
 
 
 def extract_features(
@@ -92,10 +75,7 @@ def extract_features(
         A tuple of of two lists. The lists contain extracted features for
           training and testing dataset respectively.
     """
-    vectorizer = CountVectorizer()
-    X_train = vectorizer.fit_transform(train_dataset)
-    X_test = vectorizer.transform(test_dataset)
-    return X_train, X_test
+    pass
 
 
 def train(X: ndarray, y: List[int]) -> object:
@@ -109,9 +89,7 @@ def train(X: ndarray, y: List[int]) -> object:
         A trained model object capable of predicting over unseen sets of
             instances.
     """
-    model = LogisticRegression()
-    model.fit(X, y)
-    return model
+    pass
 
 
 def evaluate(y: List[int], y_pred: List[int]) -> Tuple[float, float, float, float]:
@@ -126,22 +104,16 @@ def evaluate(y: List[int], y_pred: List[int]) -> Tuple[float, float, float, floa
     Returns:
         A tuple of four values: recall, precision, F_1, and accuracy.
     """
-    recall = recall_score(y, y_pred)
-    precision = precision_score(y, y_pred)
-    f1 = f1_score(y, y_pred)
-    accuracy = accuracy_score(y, y_pred)
-    return recall, precision, f1, accuracy
+    pass
 
 
 if __name__ == "__main__":
     print("Loading data...")
-    nltk.download("stopwords")
     train_data_raw, train_labels, test_data_raw, test_labels = load_data(
         "data/combined_sentiment_data.csv"
     )
 
     print("Processing data...")
-
     train_data = preprocess_multiple(train_data_raw)
     test_data = preprocess_multiple(test_data_raw)
 
