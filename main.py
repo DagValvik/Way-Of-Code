@@ -1,137 +1,162 @@
-from typing import List, Tuple, Union
-
 import pandas as pd
-from numpy import ndarray
+import torch
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset
+from transformers import DistilBertForSequenceClassification, DistilBertTokenizer
 
 
-def load_data(path: str) -> Tuple[List[str], List[int], List[str], List[int]]:
-    """Loads data from file and splits it into train and test sets (80-20 split).
-    Each row except first (header) contains Sentence and Sentiment separated by comma.
-    Labels should be converted to integers: 1 for "positive" and 0 for "negative".
+class SentimentDataset(Dataset):
+    def __init__(self, texts, labels, tokenizer, max_len=128):
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_len = max_len
 
-    Args:
-        path: Path to file containing sentiment data
+    def __len__(self):
+        return len(self.texts)
 
-    Returns:
-        Tuple containing:
-        - List of training sentences
-        - List of training labels (0 or 1)
-        - List of test sentences
-        - List of test labels (0 or 1)
-    """
+    def __getitem__(self, idx):
+        text = str(self.texts[idx])
+        label = self.labels[idx]
+
+        encoding = self.tokenizer(
+            text,
+            truncation=True,
+            padding="max_length",
+            max_length=self.max_len,
+            return_tensors="pt",
+        )
+
+        return {
+            "input_ids": encoding["input_ids"].flatten(),
+            "attention_mask": encoding["attention_mask"].flatten(),
+            "labels": torch.tensor(label, dtype=torch.long),
+        }
+
+
+def load_data(path: str):
+    """Loads and splits data"""
     df = pd.read_csv(path)
     df["sentiment"] = df["sentiment"].map({"positive": 1, "negative": 0})
 
-    # Use train_test_split with fixed random_state for reproducibility
     train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+    return train_df, test_df
 
-    return (
-        train_df["sentence"].tolist(),
-        train_df["sentiment"].tolist(),
-        test_df["sentence"].tolist(),
-        test_df["sentiment"].tolist(),
+
+def train(model, train_loader, device):
+    """Trains the model following the article's approach"""
+    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
+
+    model.train()
+    for epoch in range(2):
+        total_loss = 0
+
+        for batch in train_loader:
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+
+            optimizer.zero_grad()
+            outputs = model(
+                input_ids=input_ids, attention_mask=attention_mask, labels=labels
+            )
+
+            loss = outputs.loss
+            total_loss += loss.item()
+
+            loss.backward()
+            optimizer.step()
+
+        avg_loss = total_loss / len(train_loader)
+        print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
+
+    return model
+
+
+def predict(model, test_loader, device):
+    """Makes predictions using the trained model"""
+    model.eval()
+    predictions = []
+    actual_labels = []
+
+    with torch.no_grad():
+        for batch in test_loader:
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"]
+
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            predictions.extend(torch.argmax(outputs.logits, dim=1).cpu().numpy())
+            actual_labels.extend(labels.cpu().numpy())
+
+    return predictions, actual_labels
+
+
+def evaluate(predictions, actual_labels):
+    """Returns a dictionary of evaluation metrics"""
+    recall, precision, f1, _ = precision_recall_fscore_support(
+        actual_labels, predictions, average="binary"
     )
+    accuracy = accuracy_score(actual_labels, predictions)
 
-
-def preprocess(doc: str) -> str:
-    """Preprocesses text to prepare it for feature extraction.
-
-    Args:
-        doc: String comprising the unprocessed contents of some tweet.
-
-    Returns:
-        String comprising the corresponding preprocessed tweet.
-    """
-    pass
-
-
-def preprocess_multiple(docs: List[str]) -> List[str]:
-    """Preprocesses multiple texts to prepare them for feature extraction.
-
-    Args:
-        docs: List of strings, each consisting of the unprocessed contents
-            of some email file.
-
-    Returns:
-        List of strings, each comprising the corresponding preprocessed
-            text.
-    """
-    pass
-
-
-def extract_features(
-    train_dataset: List[str], test_dataset: List[str]
-) -> Union[Tuple[ndarray, ndarray], Tuple[List[float], List[float]]]:
-    """Extracts feature vectors from a preprocessed train and test datasets.
-
-    Args:
-        train_dataset: List of strings, each consisting of the preprocessed
-            tweet content.
-        test_dataset: List of strings, each consisting of the preprocessed
-            tweet content.
-
-    Returns:
-        A tuple of of two lists. The lists contain extracted features for
-          training and testing dataset respectively.
-    """
-    pass
-
-
-def train(X: ndarray, y: List[int]) -> object:
-    """Trains a classifier on extracted feature vectors.
-
-    Args:
-        X: Numerical array-like object (2D) representing the instances.
-        y: Numerical array-like object (1D) representing the labels.
-
-    Returns:
-        A trained model object capable of predicting over unseen sets of
-            instances.
-    """
-    pass
-
-
-def evaluate(y: List[int], y_pred: List[int]) -> Tuple[float, float, float, float]:
-    """Evaluates a model's predictive performance with respect to a labeled
-    dataset.
-
-    Args:
-        y: Numerical array-like object (1D) representing the true labels.
-        y_pred: Numerical array-like object (1D) representing the predicted
-            labels.
-
-    Returns:
-        A tuple of four values: recall, precision, F_1, and accuracy.
-    """
-    pass
+    return {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+    }
 
 
 if __name__ == "__main__":
+    # Set device
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("Using MPS device")
+    else:
+        device = torch.device("cpu")
+        print("Using CPU device")
+
+    # Load and prepare data
     print("Loading data...")
-    train_data_raw, train_labels, test_data_raw, test_labels = load_data(
-        "data/combined_sentiment_data.csv"
+    train_df, test_df = load_data("data/combined_sentiment_data.csv")
+
+    # Initialize tokenizer
+    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+
+    # Create datasets
+    train_dataset = SentimentDataset(
+        texts=train_df["sentence"].values,
+        labels=train_df["sentiment"].values,
+        tokenizer=tokenizer,
+    )
+    test_dataset = SentimentDataset(
+        texts=test_df["sentence"].values,
+        labels=test_df["sentiment"].values,
+        tokenizer=tokenizer,
     )
 
-    print("Processing data...")
-    train_data = preprocess_multiple(train_data_raw)
-    test_data = preprocess_multiple(test_data_raw)
+    # Create dataloaders
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=16)
 
-    print("Extracting features...")
-    train_feature_vectors, test_feature_vectors = extract_features(
-        train_data, test_data
-    )
+    # Initialize model
+    model = DistilBertForSequenceClassification.from_pretrained(
+        "distilbert-base-uncased", num_labels=2
+    ).to(device)
 
+    # Train
     print("Training...")
-    classifier = train(train_feature_vectors, train_labels)
+    model = train(model, train_loader, device)
 
-    print("Applying model on test data...")
-    predicted_labels = classifier.predict(test_feature_vectors)
+    # Predict and evaluate
+    print("Evaluating...")
+    predictions, actual_labels = predict(model, test_loader, device)
 
-    print("Evaluating")
-    recall, precision, f1, accuracy = evaluate(test_labels, predicted_labels)
+    # Calculate metrics
+    metrics = evaluate(predictions, actual_labels)
 
-    print(f"Recall:\t{recall}")
-    print(f"Precision:\t{precision}")
-    print(f"F1:\t{f1}")
-    print(f"Accuracy:\t{accuracy}")
+    print(f"Recall:\t{metrics['recall']:.4f}")
+    print(f"Precision:\t{metrics['precision']:.4f}")
+    print(f"F1:\t{metrics['f1']:.4f}")
+    print(f"Accuracy:\t{metrics['accuracy']:.4f}")
