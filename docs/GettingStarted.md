@@ -79,6 +79,16 @@ For uv run
 uv sync
 ```
 
+For å kjøre testene, kjør
+
+```sh
+pytest
+```
+eller
+```sh
+uv run pytest
+```
+
 ### Introduction to Notebooks
 
 Notebooks, like Jupyter, provide an interactive environment for writing and running Python code. They’re particularly useful for data analysis, visualization, and prototyping.
