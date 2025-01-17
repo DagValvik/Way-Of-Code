@@ -65,6 +65,20 @@ NumPy is a widely-used library in Python for numerical computations and is often
    uv run hello.py
    ```
 
+### Getting started with this project
+The code is structure like this, we have a main.py file, where the machine learning code is written. The goal will be to complete the tests written in test_public.py. To run the project, start by installing the packages. 
+
+If you use pip, run this command
+```sh
+pip install -r requirements.txt
+```
+this will install all the libraries.
+
+For uv run
+```sh
+uv sync
+```
+
 ### Introduction to Notebooks
 
 Notebooks, like Jupyter, provide an interactive environment for writing and running Python code. They’re particularly useful for data analysis, visualization, and prototyping.
